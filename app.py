@@ -8,6 +8,16 @@ from visualization import DataVisualizer
 import os
 from io import StringIO
 import traceback
+import matplotlib
+import tempfile
+
+# Configurações para produção (Render)
+matplotlib.use('Agg')  # Backend não-interativo para matplotlib
+os.environ['MPLBACKEND'] = 'Agg'
+
+# Configurar diretório temporário para matplotlib
+temp_dir = tempfile.mkdtemp()
+os.environ['MPLCONFIGDIR'] = temp_dir
 
 # Configuração da página
 st.set_page_config(

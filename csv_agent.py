@@ -1,13 +1,10 @@
 import pandas as pd
 import numpy as np
-from langchain_community.llms import OpenAI
-from langchain_community.chat_models import ChatOpenAI
-from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
-from langchain.memory import ConversationBufferMemory
+import openai
 import os
 from dotenv import load_dotenv
 import re
+import json
 from typing import Dict, List, Any, Tuple
 from data_analyzer import DataAnalyzer
 from visualization import DataVisualizer
@@ -17,7 +14,7 @@ from memory_system import MemorySystem
 load_dotenv()
 
 class CSVAgent:
-    """Agente inteligente para análise de dados CSV usando LangChain"""
+    """Agente inteligente para análise de dados CSV usando OpenAI"""
     
     def __init__(self, api_key: str = None, demo_mode: bool = False):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
@@ -26,27 +23,21 @@ class CSVAgent:
         # Inicializar componentes
         if demo_mode or not self.api_key or not self.api_key.startswith("sk-"):
             print("Modo de demonstração ativado - usando respostas simuladas")
-            self.llm = None
+            self.client = None
             self.test_mode = True
         else:
             try:
-                self.llm = ChatOpenAI(
-                    openai_api_key=self.api_key,
-                    model_name=os.getenv("MODEL_NAME", "gpt-3.5-turbo"),
-                    temperature=float(os.getenv("TEMPERATURE", "0.1"))
-                )
+                openai.api_key = self.api_key
+                self.model_name = os.getenv("MODEL_NAME", "gpt-3.5-turbo")
+                self.temperature = float(os.getenv("TEMPERATURE", "0.1"))
                 self.test_mode = False
                 print("Modo OpenAI ativado com sucesso")
             except Exception as e:
                 print(f"Erro ao conectar com OpenAI, ativando modo de demonstração: {e}")
-                self.llm = None
                 self.test_mode = True
         
         self.memory_system = MemorySystem()
-        self.conversation_memory = ConversationBufferMemory(
-            memory_key="chat_history",
-            return_messages=True
-        )
+        self.conversation_history = []
         
         self.df = None
         self.analyzer = None
@@ -60,9 +51,7 @@ class CSVAgent:
         """Configura os prompts para diferentes tipos de análise"""
         
         # Prompt principal para análise de dados
-        self.analysis_prompt = PromptTemplate(
-            input_variables=["question", "dataset_info", "context", "analysis_results"],
-            template="""
+        self.analysis_prompt_template = """
             Você é um especialista em análise de dados e ciência de dados. Você está analisando um dataset CSV.
 
             INFORMAÇÕES DO DATASET:
@@ -87,12 +76,9 @@ class CSVAgent:
 
             RESPOSTA:
             """
-        )
         
         # Prompt para geração de insights
-        self.insight_prompt = PromptTemplate(
-            input_variables=["analysis_summary", "dataset_info"],
-            template="""
+        self.insight_prompt_template = """
             Baseado na análise completa do dataset, gere insights importantes e conclusões.
 
             INFORMAÇÕES DO DATASET:
@@ -110,7 +96,6 @@ class CSVAgent:
 
             INSIGHTS:
             """
-        )
     
     def load_csv(self, file_path: str = None, df: pd.DataFrame = None) -> bool:
         """Carrega arquivo CSV ou DataFrame"""
@@ -362,13 +347,31 @@ class CSVAgent:
             configure uma API key válida da OpenAI no arquivo .env
             """
         else:
-            chain = LLMChain(llm=self.llm, prompt=self.analysis_prompt)
-            response = chain.run(
+            # Usar OpenAI diretamente
+            prompt = self.analysis_prompt_template.format(
                 question=question,
                 dataset_info=dataset_info,
                 context=context,
                 analysis_results=analysis_results
             )
+            
+            # Adicionar à conversa
+            self.conversation_history.append({"role": "user", "content": prompt})
+            
+            try:
+                completion = openai.ChatCompletion.create(
+                    model=self.model_name,
+                    messages=self.conversation_history,
+                    temperature=self.temperature,
+                    max_tokens=1000
+                )
+                response = completion.choices[0].message.content
+                
+                # Adicionar resposta à conversa
+                self.conversation_history.append({"role": "assistant", "content": response})
+                
+            except Exception as e:
+                response = f"Erro ao processar pergunta: {str(e)}"
         
         # Gerar visualização automaticamente para TODAS as perguntas
         visualization = None
@@ -453,11 +456,23 @@ class CSVAgent:
             5. Esta é uma análise simulada para demonstração
             """
         else:
-            chain = LLMChain(llm=self.llm, prompt=self.insight_prompt)
-            insights_text = chain.run(
+            # Usar OpenAI diretamente
+            prompt = self.insight_prompt_template.format(
                 analysis_summary=analysis_summary,
                 dataset_info=dataset_info
             )
+            
+            try:
+                 completion = openai.ChatCompletion.create(
+                     model=self.model_name,
+                     messages=[{"role": "user", "content": prompt}],
+                     temperature=self.temperature,
+                     max_tokens=800
+                 )
+                 insights_text = completion.choices[0].message.content
+                 
+             except Exception as e:
+                 insights_text = f"Erro ao gerar insights: {str(e)}"
         
         # Processar insights
         insights = [insight.strip() for insight in insights_text.split('\\n') if insight.strip()]

@@ -62,6 +62,19 @@ Acesse `http://localhost:8501` no seu navegador.
 - Visualizações interativas
 - Respostas a perguntas em linguagem natural
 
+## 🚀 Deploy no Render
+
+Para fazer deploy da aplicação no Render:
+
+1. **Conecte seu repositório** no [Render Dashboard](https://dashboard.render.com)
+2. **Configure as variáveis de ambiente**:
+   - `OPENAI_API_KEY`: Sua chave de API da OpenAI
+3. **Use as configurações automáticas** do arquivo `render.yaml`
+
+📖 **Guia completo**: Veja `DEPLOY_RENDER.md` para instruções detalhadas.
+
+🌐 **Demo online**: Após o deploy, sua aplicação estará disponível em `https://seu-app.onrender.com`
+
 ## Estrutura do Projeto
 
 - `app.py` - Interface principal Streamlit
@@ -69,3 +82,6 @@ Acesse `http://localhost:8501` no seu navegador.
 - `data_analyzer.py` - Módulo de análise de dados
 - `visualization.py` - Módulo de visualizações
 - `memory_system.py` - Sistema de memória do agente
+- `render.yaml` - Configuração para deploy no Render
+- `start.sh` - Script de inicialização para produção
+- `.streamlit/config.toml` - Configurações do Streamlit
