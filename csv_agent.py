@@ -27,13 +27,14 @@ class CSVAgent:
             self.test_mode = True
         else:
             try:
-                openai.api_key = self.api_key
+                self.client = openai.OpenAI(api_key=self.api_key)
                 self.model_name = os.getenv("MODEL_NAME", "gpt-3.5-turbo")
                 self.temperature = float(os.getenv("TEMPERATURE", "0.1"))
                 self.test_mode = False
                 print("Modo OpenAI ativado com sucesso")
             except Exception as e:
                 print(f"Erro ao conectar com OpenAI, ativando modo de demonstração: {e}")
+                self.client = None
                 self.test_mode = True
         
         self.memory_system = MemorySystem()
@@ -359,7 +360,7 @@ class CSVAgent:
             self.conversation_history.append({"role": "user", "content": prompt})
             
             try:
-                completion = openai.ChatCompletion.create(
+                completion = self.client.chat.completions.create(
                     model=self.model_name,
                     messages=self.conversation_history,
                     temperature=self.temperature,
@@ -463,13 +464,13 @@ class CSVAgent:
             )
             
             try:
-                 completion = openai.ChatCompletion.create(
-                     model=self.model_name,
-                     messages=[{"role": "user", "content": prompt}],
-                     temperature=self.temperature,
-                     max_tokens=800
-                 )
-                 insights_text = completion.choices[0].message.content
+                completion = self.client.chat.completions.create(
+                    model=self.model_name,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=self.temperature,
+                    max_tokens=800
+                )
+                insights_text = completion.choices[0].message.content
                  
              except Exception as e:
                  insights_text = f"Erro ao gerar insights: {str(e)}"
@@ -538,6 +539,6 @@ class CSVAgent:
         """Reinicia a sessão atual"""
         if self.session_id:
             self.memory_system.clear_session(self.session_id)
-        self.conversation_memory.clear()
+        self.conversation_history.clear()
         self.analysis_cache = {}
         self.session_id = None

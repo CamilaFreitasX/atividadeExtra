@@ -2,25 +2,23 @@ services:
   - type: web
     name: ai-csv-analyzer
     env: python
-    plan: free
+    runtime: python-3.11.10
     buildCommand: |
-      python -m pip install --upgrade pip setuptools wheel
-      pip install --no-cache-dir -r requirements.txt
-    startCommand: streamlit run app.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true --server.enableCORS=false --server.enableXsrfProtection=false
+      python --version
+      python -m pip install --upgrade pip==23.3.1
+      pip install --no-cache-dir --only-binary=all -r requirements.txt
+    startCommand: streamlit run app.py --server.port=$PORT --server.address=0.0.0.0
     envVars:
       - key: OPENAI_API_KEY
         sync: false
-      - key: PYTHONUNBUFFERED
-        value: "1"
       - key: STREAMLIT_SERVER_HEADLESS
-        value: "true"
-      - key: STREAMLIT_SERVER_ENABLE_CORS
-        value: "false"
-      - key: STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION
-        value: "false"
+        value: true
+      - key: STREAMLIT_SERVER_PORT
+        value: $PORT
       - key: MPLBACKEND
-        value: "Agg"
+        value: Agg
       - key: PIP_NO_CACHE_DIR
-        value: "1"
-    healthCheckPath: /
+        value: 1
+      - key: PYTHONPATH
+        value: /opt/render/project/src
     autoDeploy: false
