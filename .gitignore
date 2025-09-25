@@ -1,0 +1,239 @@
+# ===================================
+# ARQUIVO .GITIGNORE - PRÁTICAS DE SEGURANÇA
+# ===================================
+
+# ==========================================
+# ARQUIVOS SENSÍVEIS - NUNCA COMMITAR
+# ==========================================
+
+# Variáveis de ambiente com chaves API e senhas
+.env
+.env.local
+.env.production
+.env.staging
+.env.development
+
+# Arquivos de configuração com credenciais
+config.json
+secrets.json
+credentials.json
+api_keys.txt
+
+# ==========================================
+# ARQUIVOS TEMPORÁRIOS E CACHE
+# ==========================================
+
+# Cache do Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribuição / empacotamento
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# ==========================================
+# ARQUIVOS DE DADOS SENSÍVEIS
+# ==========================================
+
+# Dados pessoais ou sensíveis
+*_personal.csv
+*_private.csv
+*_confidential.*
+dados_reais.*
+dados_pessoais.*
+
+# Backups de banco de dados
+*.db
+*.sqlite
+*.sqlite3
+backup_*
+
+# Logs que podem conter informações sensíveis
+*.log
+logs/
+log_*
+
+# ==========================================
+# ARQUIVOS DE SISTEMA E IDE
+# ==========================================
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# ==========================================
+# ARQUIVOS ESPECÍFICOS DO PROJETO
+# ==========================================
+
+# Memória do agente (pode conter dados sensíveis)
+agent_memory.json
+memory_*.json
+
+# Relatórios temporários
+temp_report.*
+relatorio_temp.*
+
+# Arquivos de teste com dados reais
+test_data_real.*
+dados_teste_real.*
+
+# ==========================================
+# SISTEMA OPERACIONAL
+# ==========================================
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+
+# ==========================================
+# EDITORES E IDEs
+# ==========================================
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ==========================================
+# ARQUIVOS DE DEPLOYMENT
+# ==========================================
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Kubernetes
+*.kubeconfig
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# ==========================================
+# NOTAS IMPORTANTES
+# ==========================================
+
+# LEMBRE-SE:
+# 1. Nunca commite chaves API, senhas ou tokens
+# 2. Use sempre arquivos .env.example para documentar variáveis necessárias
+# 3. Revise sempre antes de fazer commit
+# 4. Use 'git status' para verificar o que será commitado
+# 5. Em caso de commit acidental de dados sensíveis, revogue as chaves imediatamente
