@@ -472,8 +472,8 @@ class CSVAgent:
                 )
                 insights_text = completion.choices[0].message.content
                  
-             except Exception as e:
-                 insights_text = f"Erro ao gerar insights: {str(e)}"
+            except Exception as e:
+                insights_text = f"Erro ao gerar insights: {str(e)}"
         
         # Processar insights
         insights = [insight.strip() for insight in insights_text.split('\\n') if insight.strip()]
