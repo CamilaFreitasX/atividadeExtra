@@ -77,24 +77,112 @@ def initialize_session_state():
         st.session_state.visualization_cache = {}
 
 def load_csv_file(uploaded_file):
-    """Carrega arquivo CSV"""
+    """Carrega arquivo CSV com otimizações para arquivos grandes e prevenção de erro 502"""
     try:
         st.info(f"🔍 Processando arquivo: {uploaded_file.name}")
-        st.info(f"📊 Tamanho do arquivo: {uploaded_file.size} bytes")
         
-        # Ler o arquivo
-        if uploaded_file.name.endswith('.csv'):
-            df = pd.read_csv(uploaded_file)
-            st.info(f"✅ Arquivo lido com sucesso! Shape: {df.shape}")
-            st.info(f"📋 Colunas: {list(df.columns)}")
-        else:
-            st.error("Por favor, faça upload de um arquivo CSV.")
+        # Verificar tamanho do arquivo
+        file_size_mb = uploaded_file.size / (1024 * 1024)
+        st.info(f"📊 Tamanho do arquivo: {file_size_mb:.2f}MB")
+        
+        # Verificações de segurança para evitar erro 502
+        if file_size_mb > 20:
+            st.error(f"❌ Arquivo muito grande ({file_size_mb:.1f}MB). Limite máximo: 20MB")
+            st.info("💡 Para arquivos grandes, use uma amostra representativa dos dados.")
             return None
         
+        # Ler o arquivo
+        if not uploaded_file.name.endswith('.csv'):
+            st.error("❌ Por favor, faça upload de um arquivo CSV.")
+            return None
+        
+        # Processamento inteligente baseado no tamanho
+        if file_size_mb > 3:
+            st.warning(f"⚠️ Arquivo grande detectado ({file_size_mb:.1f}MB). Aplicando processamento otimizado...")
+            
+            # Ler amostra primeiro para detectar estrutura
+            try:
+                sample_df = pd.read_csv(uploaded_file, nrows=500, low_memory=False)
+                st.info(f"📋 Estrutura detectada: {sample_df.shape[1]} colunas")
+                
+                # Resetar ponteiro do arquivo
+                uploaded_file.seek(0)
+                
+                # Ler com otimizações de memória
+                df = pd.read_csv(uploaded_file, 
+                               low_memory=False,
+                               engine='c',  # Engine mais rápida
+                               memory_map=True)  # Usar memory mapping
+                
+                # Limitar linhas para evitar timeout (especialmente no Render)
+                max_rows = 3000 if file_size_mb > 5 else 5000
+                if len(df) > max_rows:
+                    st.warning(f"⚠️ Dataset grande ({len(df):,} linhas). Usando amostra estratificada de {max_rows:,} linhas.")
+                    # Amostra estratificada para manter representatividade
+                    df = df.sample(n=max_rows, random_state=42).reset_index(drop=True)
+                    
+            except Exception as e:
+                st.error(f"❌ Erro ao processar arquivo grande: {str(e)}")
+                return None
+        else:
+            # Arquivos pequenos - processamento normal
+            df = pd.read_csv(uploaded_file, low_memory=False)
+        
+        st.success(f"✅ Arquivo carregado! Shape: {df.shape}")
+        st.info(f"📋 Colunas: {list(df.columns[:8])}{'...' if len(df.columns) > 8 else ''}")
+        
+        # Otimizar tipos de dados para economizar memória
+        original_memory = df.memory_usage(deep=True).sum() / (1024**2)
+        
+        for col in df.columns:
+            if df[col].dtype == 'object':
+                try:
+                    # Converter para categoria se tiver poucos valores únicos
+                    unique_ratio = df[col].nunique() / len(df)
+                    if unique_ratio < 0.5 and df[col].nunique() < 1000:
+                        df[col] = df[col].astype('category')
+                except:
+                    pass
+            elif df[col].dtype in ['int64', 'float64']:
+                try:
+                    # Otimizar tipos numéricos
+                    if df[col].dtype == 'int64':
+                        if df[col].min() >= 0 and df[col].max() <= 255:
+                            df[col] = df[col].astype('uint8')
+                        elif df[col].min() >= -128 and df[col].max() <= 127:
+                            df[col] = df[col].astype('int8')
+                        elif df[col].min() >= -32768 and df[col].max() <= 32767:
+                            df[col] = df[col].astype('int16')
+                        elif df[col].min() >= -2147483648 and df[col].max() <= 2147483647:
+                            df[col] = df[col].astype('int32')
+                    elif df[col].dtype == 'float64':
+                        # Tentar converter para float32 se não houver perda de precisão
+                        if df[col].equals(df[col].astype('float32').astype('float64')):
+                            df[col] = df[col].astype('float32')
+                except:
+                    pass
+        
+        optimized_memory = df.memory_usage(deep=True).sum() / (1024**2)
+        reduction = ((original_memory - optimized_memory) / original_memory) * 100
+        
+        st.info(f"💾 Memória otimizada: {optimized_memory:.1f}MB (redução de {reduction:.1f}%)")
+        
         return df
+        
+    except pd.errors.EmptyDataError:
+        st.error("❌ Arquivo CSV está vazio.")
+        return None
+    except pd.errors.ParserError as e:
+        st.error(f"❌ Erro ao analisar CSV: {str(e)}")
+        st.info("💡 Verifique se o arquivo está no formato CSV correto.")
+        return None
+    except MemoryError:
+        st.error("❌ Erro de memória: Arquivo muito grande para processar.")
+        st.info("💡 Tente usar uma amostra menor do dataset.")
+        return None
     except Exception as e:
-        st.error(f"Erro ao carregar arquivo: {str(e)}")
-        st.error(f"Detalhes: {traceback.format_exc()}")
+        st.error(f"❌ Erro inesperado ao carregar arquivo: {str(e)}")
+        st.error(f"🔍 Detalhes técnicos: {traceback.format_exc()}")
         return None
 
 def display_dataset_overview(df):
@@ -246,11 +334,30 @@ def display_conclusions(agent):
 
 def main():
     """Função principal da aplicação"""
-    initialize_session_state()
+    try:
+        initialize_session_state()
+        
+        # Header
+        st.markdown('<div class="main-header">🤖 Agente Inteligente de Análise CSV</div>', unsafe_allow_html=True)
+        st.markdown("---")
+        
+        # Verificar recursos do sistema (opcional)
+        try:
+            import psutil
+            memory_percent = psutil.virtual_memory().percent
+            if memory_percent > 85:
+                st.warning(f"⚠️ Uso de memória alto ({memory_percent:.1f}%). Performance pode ser afetada.")
+        except ImportError:
+            # psutil não disponível, continuar sem monitoramento
+            pass
+        except Exception:
+            # Erro ao acessar informações do sistema, continuar normalmente
+            pass
     
-    # Header
-    st.markdown('<div class="main-header">🤖 Agente Inteligente de Análise CSV</div>', unsafe_allow_html=True)
-    st.markdown("---")
+    except Exception as e:
+        st.error(f"Erro na inicialização da aplicação: {str(e)}")
+        st.error("Tente recarregar a página ou reiniciar a sessão.")
+        return
     
     # Sidebar para configurações
     with st.sidebar:
@@ -306,24 +413,74 @@ def main():
         current_file_info = f"{uploaded_file.name}_{uploaded_file.size}"
         if 'current_file_info' not in st.session_state or st.session_state.current_file_info != current_file_info:
             st.info(f"📁 Arquivo detectado: {uploaded_file.name}")
-            df = load_csv_file(uploaded_file)
             
-            if df is not None:
-                st.success(f"✅ CSV carregado com sucesso! Shape: {df.shape}")
-                st.session_state.df = df
-                st.session_state.current_file_info = current_file_info
+            # Verificar tamanho antes do processamento
+            file_size_mb = uploaded_file.size / (1024 * 1024)
+            if file_size_mb > 20:
+                st.error(f"❌ Arquivo muito grande ({file_size_mb:.1f}MB). Limite máximo: 20MB")
+                st.info("💡 Para análise de arquivos grandes, use uma amostra representativa dos dados.")
+                st.info("🔧 Sugestão: Exporte apenas as primeiras 10.000-20.000 linhas do seu dataset.")
+                return
+            
+            # Mostrar progresso para arquivos grandes
+            if file_size_mb > 2:
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                status_text.text("Iniciando processamento...")
+            
+            try:
+                import time
                 
-                # Carregar dados no agente se já inicializado
-                if st.session_state.agent is not None:
-                    try:
-                        with st.spinner("Carregando dados no agente..."):
-                            st.session_state.agent.load_csv(df=df)
-                            st.success("✅ Dados carregados no agente com sucesso!")
-                    except Exception as e:
-                        st.error(f"Erro ao carregar dados no agente: {str(e)}")
-                        st.error(f"Detalhes: {traceback.format_exc()}")
-            else:
-                st.error("❌ Erro ao carregar o arquivo CSV")
+                if file_size_mb > 3:
+                    st.warning(f"⏱️ Arquivo grande ({file_size_mb:.1f}MB). Aplicando otimizações para evitar timeout.")
+                
+                start_time = time.time()
+                
+                # Atualizar progresso
+                if file_size_mb > 2:
+                    progress_bar.progress(20)
+                    status_text.text("Carregando arquivo...")
+                
+                df = load_csv_file(uploaded_file)
+                
+                if file_size_mb > 2:
+                    progress_bar.progress(80)
+                    status_text.text("Finalizando...")
+                
+                processing_time = time.time() - start_time
+                
+                if file_size_mb > 2:
+                    progress_bar.progress(100)
+                    status_text.text("Concluído!")
+                    time.sleep(0.5)  # Mostrar conclusão brevemente
+                    progress_bar.empty()
+                    status_text.empty()
+                
+                if df is not None:
+                    st.success(f"✅ CSV carregado com sucesso! Shape: {df.shape}")
+                    st.info(f"⏱️ Tempo de processamento: {processing_time:.2f}s")
+                    st.session_state.df = df
+                    st.session_state.current_file_info = current_file_info
+                    
+                    # Carregar dados no agente se já inicializado
+                    if st.session_state.agent is not None:
+                        try:
+                            with st.spinner("Carregando dados no agente..."):
+                                st.session_state.agent.load_csv(df=df)
+                                st.success("✅ Dados carregados no agente com sucesso!")
+                        except Exception as e:
+                            st.error(f"Erro ao carregar dados no agente: {str(e)}")
+                            st.error(f"Detalhes: {traceback.format_exc()}")
+                else:
+                    st.error("❌ Erro ao carregar o arquivo CSV")
+                    
+            except TimeoutError:
+                st.error("⏱️ Timeout: Arquivo muito grande para processar. Tente uma amostra menor.")
+            except MemoryError:
+                st.error("💾 Erro de memória: Arquivo muito grande. Tente uma amostra menor.")
+            except Exception as e:
+                st.error(f"❌ Erro inesperado ao processar arquivo: {str(e)}")
+                st.error("💡 Tente recarregar a página ou usar um arquivo menor.")
     
     # Interface principal
     if st.session_state.df is not None:
