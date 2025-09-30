@@ -86,9 +86,9 @@ def load_csv_file(uploaded_file):
         st.info(f"📊 Tamanho do arquivo: {file_size_mb:.2f}MB")
         
         # Verificações de segurança para evitar erro 502
-        if file_size_mb > 20:
-            st.error(f"❌ Arquivo muito grande ({file_size_mb:.1f}MB). Limite máximo: 20MB")
-            st.info("💡 Para arquivos grandes, use uma amostra representativa dos dados.")
+        if file_size_mb > 50:
+            st.error(f"❌ Arquivo muito grande ({file_size_mb:.1f}MB). Limite máximo: 50MB")
+            st.info("💡 Para arquivos extremamente grandes, considere dividir em partes menores.")
             return None
         
         # Ler o arquivo
@@ -97,8 +97,54 @@ def load_csv_file(uploaded_file):
             return None
         
         # Processamento inteligente baseado no tamanho
-        if file_size_mb > 3:
-            st.warning(f"⚠️ Arquivo grande detectado ({file_size_mb:.1f}MB). Aplicando processamento otimizado...")
+        if file_size_mb > 5:
+            st.warning(f"⚠️ Arquivo grande detectado ({file_size_mb:.1f}MB). Aplicando processamento em chunks...")
+            
+            # Ler amostra primeiro para detectar estrutura
+            try:
+                sample_df = pd.read_csv(uploaded_file, nrows=1000, low_memory=False)
+                st.info(f"📋 Estrutura detectada: {sample_df.shape[1]} colunas")
+                
+                # Resetar ponteiro do arquivo
+                uploaded_file.seek(0)
+                
+                # Processamento em chunks para arquivos muito grandes
+                chunk_size = 5000 if file_size_mb > 20 else 10000
+                chunks = []
+                total_rows = 0
+                
+                st.info(f"🔄 Processando arquivo em chunks de {chunk_size:,} linhas...")
+                
+                # Ler arquivo em chunks
+                progress_container = st.container()
+                with progress_container:
+                    chunk_progress = st.progress(0)
+                    chunk_status = st.empty()
+                
+                for i, chunk in enumerate(pd.read_csv(uploaded_file, chunksize=chunk_size, low_memory=False)):
+                    chunks.append(chunk)
+                    total_rows += len(chunk)
+                    
+                    # Atualizar progress bar
+                    progress_percent = min(total_rows / 50000, 1.0)  # Máximo 50k linhas
+                    chunk_progress.progress(progress_percent)
+                    chunk_status.text(f"📊 Processando chunk {i+1}: {total_rows:,} linhas carregadas")
+                    
+                    # Limitar número total de linhas para evitar problemas de memória
+                    if total_rows > 50000:  # Limite máximo de 50k linhas
+                        chunk_status.text(f"⚠️ Limitando processamento a {total_rows:,} linhas para otimizar performance.")
+                        break
+                
+                # Combinar chunks
+                st.info("🔗 Combinando dados processados...")
+                df = pd.concat(chunks, ignore_index=True)
+                
+            except Exception as e:
+                st.error(f"❌ Erro ao processar arquivo em chunks: {str(e)}")
+                return None
+                
+        elif file_size_mb > 2:
+            st.info(f"📊 Arquivo médio detectado ({file_size_mb:.1f}MB). Aplicando otimizações...")
             
             # Ler amostra primeiro para detectar estrutura
             try:
@@ -114,12 +160,10 @@ def load_csv_file(uploaded_file):
                                engine='c',  # Engine mais rápida
                                memory_map=True)  # Usar memory mapping
                 
-                # Limitar linhas para evitar timeout (especialmente no Render)
-                max_rows = 3000 if file_size_mb > 5 else 5000
-                if len(df) > max_rows:
-                    st.warning(f"⚠️ Dataset grande ({len(df):,} linhas). Usando amostra estratificada de {max_rows:,} linhas.")
-                    # Amostra estratificada para manter representatividade
-                    df = df.sample(n=max_rows, random_state=42).reset_index(drop=True)
+                # Para arquivos médios, usar amostragem inteligente se necessário
+                if len(df) > 20000:
+                    st.warning(f"⚠️ Dataset com {len(df):,} linhas. Usando amostra estratificada de 20.000 linhas.")
+                    df = df.sample(n=20000, random_state=42).reset_index(drop=True)
                     
             except Exception as e:
                 st.error(f"❌ Erro ao processar arquivo grande: {str(e)}")
@@ -416,10 +460,9 @@ def main():
             
             # Verificar tamanho antes do processamento
             file_size_mb = uploaded_file.size / (1024 * 1024)
-            if file_size_mb > 20:
-                st.error(f"❌ Arquivo muito grande ({file_size_mb:.1f}MB). Limite máximo: 20MB")
-                st.info("💡 Para análise de arquivos grandes, use uma amostra representativa dos dados.")
-                st.info("🔧 Sugestão: Exporte apenas as primeiras 10.000-20.000 linhas do seu dataset.")
+            if file_size_mb > 50:
+                st.error(f"❌ Arquivo muito grande ({file_size_mb:.1f}MB). Limite máximo: 50MB")
+                st.info("💡 Para arquivos extremamente grandes, considere dividir em partes menores.")
                 return
             
             # Mostrar progresso para arquivos grandes
@@ -431,8 +474,10 @@ def main():
             try:
                 import time
                 
-                if file_size_mb > 3:
-                    st.warning(f"⏱️ Arquivo grande ({file_size_mb:.1f}MB). Aplicando otimizações para evitar timeout.")
+                if file_size_mb > 5:
+                    st.warning(f"⏱️ Arquivo grande ({file_size_mb:.1f}MB). Aplicando processamento otimizado em chunks.")
+                elif file_size_mb > 2:
+                    st.info(f"📊 Processando arquivo de {file_size_mb:.1f}MB...")
                 
                 start_time = time.time()
                 
