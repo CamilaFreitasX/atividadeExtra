@@ -16,7 +16,7 @@ st.set_page_config(
 )
 
 # Importar módulos principais
-from app import main
+from streamlit_app import main
 
 if __name__ == "__main__":
     # Configurações específicas para Hugging Face
