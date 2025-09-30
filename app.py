@@ -438,6 +438,12 @@ def main():
             help="Faça upload de um arquivo CSV para análise"
         )
         
+        # Botão para limpar arquivo atual
+        if uploaded_file is not None:
+            if st.button("🗑️ Limpar Arquivo", help="Remove o arquivo atual e permite selecionar outro"):
+                st.session_state.clear()
+                st.rerun()
+        
         # Configuração da API
         st.subheader("🔑 Configuração da API")
         api_key = st.text_input(
@@ -485,7 +491,33 @@ def main():
             file_size_mb = uploaded_file.size / (1024 * 1024)
             if file_size_mb > 50:
                 st.error(f"❌ Arquivo muito grande ({file_size_mb:.1f}MB). Limite máximo: 50MB")
-                st.info("💡 Para arquivos extremamente grandes, considere dividir em partes menores.")
+                
+                # Mostrar opções para o usuário
+                st.markdown("### 🔧 Opções para arquivos grandes:")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.info("**💡 Sugestões:**")
+                    st.markdown("""
+                    - Divida o arquivo em partes menores
+                    - Use apenas uma amostra dos dados
+                    - Remova colunas desnecessárias
+                    - Comprima o arquivo (ZIP)
+                    """)
+                
+                with col2:
+                    st.warning("**⚠️ Limites do sistema:**")
+                    st.markdown(f"""
+                    - **Tamanho atual:** {file_size_mb:.1f}MB
+                    - **Limite máximo:** 50MB
+                    - **Excesso:** {file_size_mb - 50:.1f}MB
+                    """)
+                
+                # Botão para tentar novamente
+                if st.button("🔄 Tentar com outro arquivo", key="try_another_file"):
+                    st.session_state.clear()
+                    st.rerun()
+                
                 return
             
             # Mostrar progresso para arquivos grandes
