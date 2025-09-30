@@ -10,6 +10,7 @@ enableStaticServing = false
 runOnSave = false
 allowRunOnSave = false
 maxUploadSize = 200
+maxMessageSize = 200
 
 [browser]
 gatherUsageStats = false

@@ -18,8 +18,10 @@
 1. Clique em "New app"
 2. Conecte seu repositório: CamilaFreitasX/atividadeExtra
 3. Branch: main
-4. Main file: app.py
-5. Deploy!
+4. Main file: streamlit_app.py
+5. Python version: 3.11 (automático via runtime.txt)
+6. Port: 8501 (padrão configurado)
+7. Deploy!
 ```
 
 ### 3. **Configurar Variáveis**
