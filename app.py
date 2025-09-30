@@ -10,6 +10,7 @@ from io import StringIO
 import traceback
 import matplotlib
 import tempfile
+import math
 
 # Configurações para produção (Render)
 matplotlib.use('Agg')  # Backend não-interativo para matplotlib
@@ -77,7 +78,7 @@ def initialize_session_state():
         st.session_state.visualization_cache = {}
 
 def load_csv_file(uploaded_file):
-    """Carrega arquivo CSV com otimizações para arquivos grandes e prevenção de erro 502"""
+    """Carrega arquivo CSV com particionamento automático para arquivos grandes"""
     try:
         st.info(f"🔍 Processando arquivo: {uploaded_file.name}")
         
@@ -85,20 +86,42 @@ def load_csv_file(uploaded_file):
         file_size_mb = uploaded_file.size / (1024 * 1024)
         st.info(f"📊 Tamanho do arquivo: {file_size_mb:.2f}MB")
         
-        # Verificações de segurança para evitar erro 502
+        # Verificações de segurança
         if file_size_mb > 50:
             st.error(f"❌ Arquivo muito grande ({file_size_mb:.1f}MB). Limite máximo: 50MB")
             st.info("💡 Para arquivos extremamente grandes, considere dividir em partes menores.")
             return None
         
-        # Ler o arquivo
+        # Verificar formato
         if not uploaded_file.name.endswith('.csv'):
             st.error("❌ Por favor, faça upload de um arquivo CSV.")
             return None
         
-        # Processamento inteligente baseado no tamanho
-        if file_size_mb > 5:
-            st.warning(f"⚠️ Arquivo grande detectado ({file_size_mb:.1f}MB). Aplicando processamento em chunks...")
+        # Sistema de particionamento automático para arquivos grandes
+        if file_size_mb > 10:
+            st.warning(f"🔄 Arquivo grande detectado ({file_size_mb:.1f}MB). Aplicando particionamento automático...")
+            
+            # Usar sistema de particionamento
+            partitions = partition_large_file(uploaded_file, max_partition_size_mb=10)
+            
+            if not partitions:
+                st.error("❌ Erro ao particionar arquivo.")
+                return None
+            
+            # Processar partições sequencialmente
+            results = process_partitioned_data(partitions, operation="analyze")
+            
+            if results and results['combined_sample'] is not None:
+                df = results['combined_sample']
+                st.success(f"✅ Arquivo particionado e processado! Total: {results['total_rows']:,} linhas")
+                st.info(f"📋 Amostra combinada: {len(df):,} linhas de {results['total_columns']} colunas")
+            else:
+                st.error("❌ Erro ao processar partições.")
+                return None
+                
+        # Processamento inteligente baseado no tamanho para arquivos médios
+        elif file_size_mb > 5:
+            st.warning(f"⚠️ Arquivo médio-grande detectado ({file_size_mb:.1f}MB). Aplicando processamento em chunks...")
             
             # Ler amostra primeiro para detectar estrutura
             try:
@@ -635,6 +658,145 @@ def main():
         - Crie um arquivo `.env` com sua `OPENAI_API_KEY`
         - Ou insira a chave diretamente na barra lateral
         """)
+
+def partition_large_file(uploaded_file, max_partition_size_mb=10):
+    """
+    Particiona automaticamente arquivos grandes em partes menores para processamento otimizado.
+    
+    Args:
+        uploaded_file: Arquivo carregado pelo Streamlit
+        max_partition_size_mb: Tamanho máximo de cada partição em MB
+    
+    Returns:
+        list: Lista de DataFrames representando as partições
+    """
+    file_size_mb = uploaded_file.size / (1024 * 1024)
+    
+    if file_size_mb <= max_partition_size_mb:
+        # Arquivo pequeno, não precisa particionar
+        return [pd.read_csv(uploaded_file, low_memory=False)]
+    
+    # Calcular número de partições necessárias
+    num_partitions = math.ceil(file_size_mb / max_partition_size_mb)
+    
+    st.info(f"🔄 Arquivo grande detectado ({file_size_mb:.1f}MB). Dividindo em {num_partitions} partições...")
+    
+    # Primeiro, descobrir o número total de linhas
+    uploaded_file.seek(0)
+    total_lines = sum(1 for _ in uploaded_file) - 1  # -1 para excluir cabeçalho
+    uploaded_file.seek(0)
+    
+    # Calcular linhas por partição
+    lines_per_partition = math.ceil(total_lines / num_partitions)
+    
+    st.info(f"📊 Total de linhas: {total_lines:,} | Linhas por partição: {lines_per_partition:,}")
+    
+    partitions = []
+    
+    # Container para progress bar
+    progress_container = st.container()
+    with progress_container:
+        partition_progress = st.progress(0)
+        partition_status = st.empty()
+    
+    # Ler arquivo em partições
+    for i in range(num_partitions):
+        start_row = i * lines_per_partition
+        
+        # Para a última partição, ler até o final
+        if i == num_partitions - 1:
+            nrows = None
+        else:
+            nrows = lines_per_partition
+        
+        try:
+            # Resetar ponteiro do arquivo
+            uploaded_file.seek(0)
+            
+            # Ler partição
+            if start_row == 0:
+                # Primeira partição - incluir cabeçalho
+                partition_df = pd.read_csv(uploaded_file, nrows=nrows, low_memory=False)
+            else:
+                # Partições subsequentes - pular linhas anteriores
+                partition_df = pd.read_csv(uploaded_file, skiprows=range(1, start_row + 1), nrows=nrows, low_memory=False)
+            
+            partitions.append(partition_df)
+            
+            # Atualizar progress bar
+            progress_percent = (i + 1) / num_partitions
+            partition_progress.progress(progress_percent)
+            partition_status.text(f"📦 Partição {i+1}/{num_partitions} processada: {len(partition_df):,} linhas")
+            
+        except Exception as e:
+            st.error(f"❌ Erro ao processar partição {i+1}: {str(e)}")
+            break
+    
+    partition_status.text(f"✅ {len(partitions)} partições criadas com sucesso!")
+    
+    return partitions
+
+def process_partitioned_data(partitions, operation="analyze"):
+    """
+    Processa dados particionados de forma sequencial.
+    
+    Args:
+        partitions: Lista de DataFrames (partições)
+        operation: Tipo de operação ("analyze", "visualize", "summary")
+    
+    Returns:
+        dict: Resultados consolidados do processamento
+    """
+    if not partitions:
+        return None
+    
+    st.info(f"🔄 Processando {len(partitions)} partições sequencialmente...")
+    
+    results = {
+        'total_rows': 0,
+        'total_columns': partitions[0].shape[1] if partitions else 0,
+        'column_names': partitions[0].columns.tolist() if partitions else [],
+        'data_types': {},
+        'summary_stats': {},
+        'combined_sample': None
+    }
+    
+    # Container para progress bar
+    progress_container = st.container()
+    with progress_container:
+        process_progress = st.progress(0)
+        process_status = st.empty()
+    
+    # Processar cada partição
+    for i, partition in enumerate(partitions):
+        try:
+            # Atualizar contadores
+            results['total_rows'] += len(partition)
+            
+            # Primeira partição - estabelecer estrutura base
+            if i == 0:
+                results['data_types'] = partition.dtypes.to_dict()
+                results['summary_stats'] = partition.describe().to_dict()
+                results['combined_sample'] = partition.head(1000).copy()
+            else:
+                # Partições subsequentes - combinar amostras
+                if results['combined_sample'] is not None and len(results['combined_sample']) < 5000:
+                    sample_size = min(1000, len(partition))
+                    additional_sample = partition.head(sample_size)
+                    results['combined_sample'] = pd.concat([results['combined_sample'], additional_sample], ignore_index=True)
+            
+            # Atualizar progress bar
+            progress_percent = (i + 1) / len(partitions)
+            process_progress.progress(progress_percent)
+            process_status.text(f"⚙️ Processando partição {i+1}/{len(partitions)}: {len(partition):,} linhas")
+            
+        except Exception as e:
+            st.error(f"❌ Erro ao processar partição {i+1}: {str(e)}")
+            continue
+    
+    process_status.text(f"✅ Processamento concluído: {results['total_rows']:,} linhas totais")
+    
+    return results
 
 if __name__ == "__main__":
     main()
