@@ -86,9 +86,9 @@ def load_csv_file(uploaded_file):
         file_size_mb = uploaded_file.size / (1024 * 1024)
         st.info(f"📊 Tamanho do arquivo: {file_size_mb:.2f}MB")
         
-        # Verificações de segurança - Limite aumentado para Render
-        if file_size_mb > 200:
-            st.error(f"❌ Arquivo muito grande ({file_size_mb:.1f}MB). Limite máximo: 200MB")
+        # Verificações de segurança - Limite aumentado para Railway
+        if file_size_mb > 500:
+            st.error(f"❌ Arquivo muito grande ({file_size_mb:.1f}MB). Limite máximo: 500MB")
             st.info("💡 Para arquivos extremamente grandes, considere dividir em partes menores.")
             return None
         
@@ -536,8 +536,8 @@ def main():
             
             # Verificar tamanho antes do processamento
             file_size_mb = uploaded_file.size / (1024 * 1024)
-            if file_size_mb > 200:
-                st.error(f"❌ Arquivo muito grande ({file_size_mb:.1f}MB). Limite máximo: 200MB")
+            if file_size_mb > 500:
+                st.error(f"❌ Arquivo muito grande ({file_size_mb:.1f}MB). Limite máximo: 500MB")
                 
                 # Mostrar opções para o usuário
                 st.markdown("### 🔧 Opções para arquivos grandes:")
@@ -556,8 +556,8 @@ def main():
                     st.warning("**⚠️ Limites do sistema:**")
                     st.markdown(f"""
                     - **Tamanho atual:** {file_size_mb:.1f}MB
-                    - **Limite máximo:** 200MB
-                    - **Excesso:** {file_size_mb - 200:.1f}MB
+                    - **Limite máximo:** 500MB
+                    - **Excesso:** {file_size_mb - 500:.1f}MB
                     """)
                 
                 # Botão para tentar novamente
@@ -741,7 +741,7 @@ def main():
 def partition_large_file(uploaded_file, max_partition_size_mb=10):
     """
     Particiona automaticamente arquivos grandes em partes menores para processamento otimizado.
-    Otimizado para arquivos de até 200MB no Render
+    Otimizado para arquivos de até 500MB no Railway
     
     Args:
         uploaded_file: Arquivo carregado pelo Streamlit
