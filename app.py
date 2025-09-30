@@ -86,9 +86,9 @@ def load_csv_file(uploaded_file):
         file_size_mb = uploaded_file.size / (1024 * 1024)
         st.info(f"📊 Tamanho do arquivo: {file_size_mb:.2f}MB")
         
-        # Verificações de segurança
-        if file_size_mb > 50:
-            st.error(f"❌ Arquivo muito grande ({file_size_mb:.1f}MB). Limite máximo: 50MB")
+        # Verificações de segurança - Limite aumentado para Render
+        if file_size_mb > 200:
+            st.error(f"❌ Arquivo muito grande ({file_size_mb:.1f}MB). Limite máximo: 200MB")
             st.info("💡 Para arquivos extremamente grandes, considere dividir em partes menores.")
             return None
         
@@ -97,9 +97,9 @@ def load_csv_file(uploaded_file):
             st.error("❌ Por favor, faça upload de um arquivo CSV.")
             return None
         
-        # Sistema de particionamento automático para arquivos grandes
-        if file_size_mb > 10:
-            st.warning(f"🔄 Arquivo grande detectado ({file_size_mb:.1f}MB). Aplicando particionamento automático...")
+        # Sistema de particionamento automático para arquivos muito grandes
+        if file_size_mb > 50:
+            st.warning(f"🔄 Arquivo muito grande detectado ({file_size_mb:.1f}MB). Aplicando particionamento automático...")
             
             # Usar sistema de particionamento
             partitions = partition_large_file(uploaded_file, max_partition_size_mb=10)
@@ -117,6 +117,53 @@ def load_csv_file(uploaded_file):
                 st.info(f"📋 Amostra combinada: {len(df):,} linhas de {results['total_columns']} colunas")
             else:
                 st.error("❌ Erro ao processar partições.")
+                return None
+                
+        # Processamento otimizado por chunks para arquivos grandes (20-50MB)
+        elif file_size_mb > 20:
+            st.warning(f"⚠️ Arquivo grande detectado ({file_size_mb:.1f}MB). Aplicando processamento em chunks...")
+            
+            # Ler amostra primeiro para detectar estrutura
+            try:
+                sample_df = pd.read_csv(uploaded_file, nrows=1000, low_memory=False)
+                st.info(f"📋 Estrutura detectada: {sample_df.shape[1]} colunas")
+                
+                # Resetar ponteiro do arquivo
+                uploaded_file.seek(0)
+                
+                # Processamento em chunks para arquivos muito grandes
+                chunk_size = 2000  # Chunks menores para arquivos grandes
+                chunks = []
+                total_rows = 0
+                
+                st.info(f"🔄 Processando arquivo em chunks de {chunk_size:,} linhas...")
+                
+                # Ler arquivo em chunks
+                progress_container = st.container()
+                with progress_container:
+                    chunk_progress = st.progress(0)
+                    chunk_status = st.empty()
+                
+                for i, chunk in enumerate(pd.read_csv(uploaded_file, chunksize=chunk_size, low_memory=False)):
+                    chunks.append(chunk)
+                    total_rows += len(chunk)
+                    
+                    # Atualizar progress bar
+                    progress_percent = min(total_rows / 30000, 1.0)  # Máximo 30k linhas
+                    chunk_progress.progress(progress_percent)
+                    chunk_status.text(f"📊 Processando chunk {i+1}: {total_rows:,} linhas carregadas")
+                    
+                    # Limitar número total de linhas para evitar problemas de memória
+                    if total_rows > 30000:  # Limite máximo de 30k linhas
+                        chunk_status.text(f"⚠️ Limitando processamento a {total_rows:,} linhas para otimizar performance.")
+                        break
+                
+                # Combinar chunks
+                st.info("🔗 Combinando dados processados...")
+                df = pd.concat(chunks, ignore_index=True)
+                
+            except Exception as e:
+                st.error(f"❌ Erro ao processar arquivo em chunks: {str(e)}")
                 return None
                 
         # Processamento inteligente baseado no tamanho para arquivos médios
@@ -489,8 +536,8 @@ def main():
             
             # Verificar tamanho antes do processamento
             file_size_mb = uploaded_file.size / (1024 * 1024)
-            if file_size_mb > 50:
-                st.error(f"❌ Arquivo muito grande ({file_size_mb:.1f}MB). Limite máximo: 50MB")
+            if file_size_mb > 200:
+                st.error(f"❌ Arquivo muito grande ({file_size_mb:.1f}MB). Limite máximo: 200MB")
                 
                 # Mostrar opções para o usuário
                 st.markdown("### 🔧 Opções para arquivos grandes:")
@@ -509,8 +556,8 @@ def main():
                     st.warning("**⚠️ Limites do sistema:**")
                     st.markdown(f"""
                     - **Tamanho atual:** {file_size_mb:.1f}MB
-                    - **Limite máximo:** 50MB
-                    - **Excesso:** {file_size_mb - 50:.1f}MB
+                    - **Limite máximo:** 200MB
+                    - **Excesso:** {file_size_mb - 200:.1f}MB
                     """)
                 
                 # Botão para tentar novamente
@@ -694,6 +741,7 @@ def main():
 def partition_large_file(uploaded_file, max_partition_size_mb=10):
     """
     Particiona automaticamente arquivos grandes em partes menores para processamento otimizado.
+    Otimizado para arquivos de até 200MB no Render
     
     Args:
         uploaded_file: Arquivo carregado pelo Streamlit
@@ -704,24 +752,56 @@ def partition_large_file(uploaded_file, max_partition_size_mb=10):
     """
     file_size_mb = uploaded_file.size / (1024 * 1024)
     
+    # Calcular tamanho ideal da partição baseado no tamanho do arquivo
+    if file_size_mb > 100:
+        partition_size = 2000  # Partições muito pequenas para arquivos gigantes
+        max_rows = 20000  # Limite máximo de linhas para arquivos muito grandes
+    elif file_size_mb > 50:
+        partition_size = 3000  # Partições pequenas para arquivos grandes
+        max_rows = 30000  # Limite máximo de linhas
+    elif file_size_mb > 30:
+        partition_size = 5000  # Partições médias
+        max_rows = 50000  # Limite máximo de linhas
+    else:
+        partition_size = 8000  # Partições maiores para arquivos menores
+        max_rows = 100000  # Limite máximo de linhas
+    
     if file_size_mb <= max_partition_size_mb:
         # Arquivo pequeno, não precisa particionar
-        return [pd.read_csv(uploaded_file, low_memory=False)]
+        df = pd.read_csv(uploaded_file, low_memory=False)
+        # Aplicar limite de linhas mesmo para arquivos pequenos
+        if len(df) > max_rows:
+            df = df.head(max_rows)
+            st.warning(f"⚠️ Dataset limitado a {max_rows:,} linhas para otimizar performance.")
+        return [df]
     
-    # Calcular número de partições necessárias
-    num_partitions = math.ceil(file_size_mb / max_partition_size_mb)
+    st.info(f"📊 Configuração: Partições de {partition_size:,} linhas (máx: {max_rows:,} linhas)")
+    
+    # Primeiro, descobrir o número total de linhas de forma mais eficiente
+    uploaded_file.seek(0)
+    # Estimar número de linhas baseado em amostra
+    sample_lines = 0
+    sample_bytes = 0
+    for line in uploaded_file:
+        sample_lines += 1
+        sample_bytes += len(line)
+        if sample_lines >= 1000:  # Amostra de 1000 linhas
+            break
+    
+    # Estimar total de linhas
+    avg_line_size = sample_bytes / sample_lines
+    estimated_total_lines = int(uploaded_file.size / avg_line_size) - 1  # -1 para excluir cabeçalho
+    
+    # Aplicar limite máximo de linhas
+    total_lines_to_process = min(estimated_total_lines, max_rows)
+    
+    uploaded_file.seek(0)
+    
+    # Calcular número de partições baseado no tamanho da partição
+    num_partitions = math.ceil(total_lines_to_process / partition_size)
     
     st.info(f"🔄 Arquivo grande detectado ({file_size_mb:.1f}MB). Dividindo em {num_partitions} partições...")
-    
-    # Primeiro, descobrir o número total de linhas
-    uploaded_file.seek(0)
-    total_lines = sum(1 for _ in uploaded_file) - 1  # -1 para excluir cabeçalho
-    uploaded_file.seek(0)
-    
-    # Calcular linhas por partição
-    lines_per_partition = math.ceil(total_lines / num_partitions)
-    
-    st.info(f"📊 Total de linhas: {total_lines:,} | Linhas por partição: {lines_per_partition:,}")
+    st.info(f"📊 Estimativa: {estimated_total_lines:,} linhas | Processando: {total_lines_to_process:,} linhas")
     
     partitions = []
     
@@ -732,14 +812,16 @@ def partition_large_file(uploaded_file, max_partition_size_mb=10):
         partition_status = st.empty()
     
     # Ler arquivo em partições
+    total_rows_read = 0
     for i in range(num_partitions):
-        start_row = i * lines_per_partition
+        start_row = i * partition_size
         
-        # Para a última partição, ler até o final
-        if i == num_partitions - 1:
-            nrows = None
-        else:
-            nrows = lines_per_partition
+        # Calcular quantas linhas ler nesta partição
+        remaining_rows = total_lines_to_process - total_rows_read
+        nrows = min(partition_size, remaining_rows)
+        
+        if nrows <= 0:
+            break
         
         try:
             # Resetar ponteiro do arquivo
@@ -754,6 +836,7 @@ def partition_large_file(uploaded_file, max_partition_size_mb=10):
                 partition_df = pd.read_csv(uploaded_file, skiprows=range(1, start_row + 1), nrows=nrows, low_memory=False)
             
             partitions.append(partition_df)
+            total_rows_read += len(partition_df)
             
             # Atualizar progress bar
             progress_percent = (i + 1) / num_partitions
@@ -764,17 +847,19 @@ def partition_large_file(uploaded_file, max_partition_size_mb=10):
             st.error(f"❌ Erro ao processar partição {i+1}: {str(e)}")
             break
     
-    partition_status.text(f"✅ {len(partitions)} partições criadas com sucesso!")
+    partition_status.text(f"✅ {len(partitions)} partições criadas com sucesso! Total: {total_rows_read:,} linhas")
     
     return partitions
 
-def process_partitioned_data(partitions, operation="analyze"):
+def process_partitioned_data(partitions, operation="analyze", max_rows=50000):
     """
     Processa dados particionados de forma sequencial.
+    Otimizado para arquivos grandes no Render
     
     Args:
         partitions: Lista de DataFrames (partições)
         operation: Tipo de operação ("analyze", "visualize", "summary")
+        max_rows: Limite máximo de linhas para processamento
     
     Returns:
         dict: Resultados consolidados do processamento

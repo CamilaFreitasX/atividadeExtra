@@ -1,0 +1,37 @@
+[server]
+# Configurações otimizadas para Render
+port = 8501
+headless = true
+enableCORS = false
+enableXsrfProtection = false
+
+# Configurações de memória para arquivos grandes
+maxUploadSize = 200
+maxMessageSize = 200
+
+[browser]
+# Desabilitar coleta de estatísticas para economizar recursos
+gatherUsageStats = false
+
+[theme]
+# Tema escuro para economizar recursos
+primaryColor = "#FF6B6B"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#262730"
+textColor = "#FAFAFA"
+
+[client]
+# Configurações de timeout para arquivos grandes
+caching = true
+displayEnabled = true
+showErrorDetails = true
+
+[runner]
+# Configurações de execução otimizadas
+magicEnabled = true
+installTracer = false
+fixMatplotlib = true
+
+# Configurações de memória
+fastReruns = true
+enforceSerializableSessionState = false

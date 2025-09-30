@@ -3,11 +3,12 @@ services:
     name: ai-csv-analyzer
     env: python
     runtime: python-3.11.10
+    plan: starter  # Usar plano starter para mais recursos
     buildCommand: |
       python --version
       python -m pip install --upgrade pip==23.3.1
       pip install --no-cache-dir --only-binary=all -r requirements.txt
-    startCommand: streamlit run app.py --server.port=$PORT --server.address=0.0.0.0
+    startCommand: streamlit run app.py --server.port=$PORT --server.address=0.0.0.0 --server.maxUploadSize=200 --server.maxMessageSize=200
     envVars:
       - key: OPENAI_API_KEY
         sync: false
@@ -15,10 +16,20 @@ services:
         value: true
       - key: STREAMLIT_SERVER_PORT
         value: $PORT
+      - key: STREAMLIT_SERVER_MAX_UPLOAD_SIZE
+        value: 200
+      - key: STREAMLIT_SERVER_MAX_MESSAGE_SIZE
+        value: 200
+      - key: STREAMLIT_BROWSER_GATHER_USAGE_STATS
+        value: false
       - key: MPLBACKEND
         value: Agg
       - key: PIP_NO_CACHE_DIR
         value: 1
       - key: PYTHONPATH
         value: /opt/render/project/src
+      - key: PYTHONUNBUFFERED
+        value: 1
+      - key: STREAMLIT_SERVER_ENABLE_CORS
+        value: false
     autoDeploy: false
